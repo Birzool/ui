@@ -239,8 +239,7 @@ function definePrimitive<
       } else if (rendering) {
         return found as Part<State, Api, SlotProps<Slots[S]>>
       }
-      found.props = props
-      propsRendered(found)
+      propsRendered(found, props)
       return found as Part<State, Api, SlotProps<Slots[S]>>
     }
 

@@ -45,8 +45,12 @@ type PartRecord = Part & {
   propsListeners?: Set<() => void>
   // The bound element's id when it isn't the one the slot makes, like an author's.
   own?: string
-  // The props `el` bound with, kept in development to compare.
-  boundProps?: Part["props"]
+  // In development: whether the renders since the part last bound gave it
+  // values that differ, as keyless parts of several elements do.
+  mixed?: boolean
+  // In development: whether it bound since its last render, so the next
+  // render starts counting again.
+  bound?: boolean
 }
 
 // The instance's side of its parts.
@@ -74,6 +78,8 @@ type PartOwner = {
   // Whether a render took an own id since parts last heard, which they hear
   // once the elements bind, so a part rendered before it points at it too.
   renamed?: boolean
+  // In development: the `slot:key` of parts it warned are shared, warned once.
+  shared?: Set<string>
 }
 
 // Every part an adapter holds came from `instance.part()`, which makes a record.
@@ -362,15 +368,22 @@ function handlers(part: Part) {
  * `onProps` listeners run.
  */
 function commit(part: Part, props: Part["props"]) {
-  if (part.props === props) {
-    return
+  if (part.props !== props) {
+    propsRendered(part as PartRecord, props)
   }
-  part.props = props
-  propsRendered(part as PartRecord)
 }
 
-// Tells the part's `onProps` listeners it rendered with new props.
-function propsRendered(part: PartRecord) {
+// Gives the part the props it rendered with and tells its `onProps`
+// listeners. In development it notes when they differ from the last render's
+// since it bound: the elements that bind next may each have its own.
+function propsRendered(part: PartRecord, props: Part["props"]) {
+  if (dev) {
+    if (part.bound) {
+      part.bound = part.mixed = false
+    }
+    part.mixed ||= differs(part.props, props)
+  }
+  part.props = props
   part.propsListeners?.forEach((listener) => listener())
 }
 
@@ -442,7 +455,7 @@ function bind(part: Part, el: HTMLElement, host: Host = { by: "core" }) {
   part.el = el
   kept.binding = binding
   if (dev) {
-    kept.boundProps = part.props
+    kept.bound = true
   }
   const cleanups = [lease(kept)]
   if (canHide(part)) {
@@ -502,28 +515,32 @@ function bind(part: Part, el: HTMLElement, host: Host = { by: "core" }) {
 
 // Two elements on a keyed part, or on a keyless part rendered with other
 // values like grid cells without ids, share props, so a press runs with the
-// other's. A microtask later: an update can hand a part on before it moves.
+// other's. Once per part, a microtask later: an update can hand a part on.
 function checkShared(
   part: Part,
   bound: HTMLElement | null | undefined,
   el: HTMLElement
 ) {
-  if (!bound || bound === el) {
-    return
-  }
-  if (!part.key && !differs((part as PartRecord).boundProps, part.props)) {
+  if (!bound || bound === el || (!part.key && !(part as PartRecord).mixed)) {
     return
   }
   queueMicrotask(() => {
     if (part.el !== el || !bound.isConnected || !el.isConnected) {
       return
     }
-    const { parts, label } = ownerOf(part)
+    const owner = ownerOf(part)
+    const { parts, label } = owner
     for (const other of parts.values()) {
       if (other.el === bound) {
         return
       }
     }
+    const shared = (owner.shared ??= new Set())
+    const mapKey = `${part.slot}:${part.key}`
+    if (shared.has(mapKey)) {
+      return
+    }
+    shared.add(mapKey)
     warn(
       part.key
         ? `two "${part.slot}" parts share the key "${part.key}". Give each an id or a unique value.`
@@ -541,7 +558,7 @@ const isValue = (value: unknown) =>
   value === null || (typeof value !== "object" && typeof value !== "function")
 
 function differs(before: object | undefined, after: object) {
-  if (!before) {
+  if (!before || before === after) {
     return false
   }
   const a = before as Record<string, unknown>
