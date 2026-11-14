@@ -1521,50 +1521,89 @@ describe("agent press", () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  test("presses a toast's action by its text", async () => {
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
+  // A toast's action renders as a button, or as a link when it has `href`;
+  // its close is a button. Each is listed and pressed by its text.
+  test.each([
+    { element: "a button action", part: "action", tag: "button", text: "Undo" },
+    { element: "a link action", part: "action", tag: "a", text: "Undo" },
+    { element: "the close", part: "close", tag: "button", text: "Dismiss" },
+  ] as const)(
+    "lists and presses $element of a toast by its text",
+    async ({ part, tag, text }) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        }
+      )
+      cleanups.push(() => vi.unstubAllGlobals())
+      const agent = createAgent()
+      const toaster = createToaster({ overlays: createOverlays() })
+      const id = toaster("Message deleted", {
+        duration: Infinity,
+        action: { label: "Undo", href: tag === "a" ? "#undo" : undefined },
+      })
+      const instance = toastRegion({ id: "toasts", toaster })
+      const region = document.body.appendChild(document.createElement("section"))
+      const list = region.appendChild(document.createElement("ol"))
+      const root = list.appendChild(document.createElement("li"))
+      root.getAnimations = () => []
+      const title = root.appendChild(document.createElement("div"))
+      title.textContent = "Message deleted"
+      const el = root.appendChild(document.createElement(tag))
+      if (el instanceof HTMLAnchorElement) {
+        el.href = "#undo"
       }
-    )
-    cleanups.push(() => vi.unstubAllGlobals())
-    const agent = createAgent()
-    const toaster = createToaster({ overlays: createOverlays() })
-    const onAction = vi.fn()
-    const id = toaster("Message deleted", {
-      duration: Infinity,
-      action: { label: "Undo", onAction },
+      el.textContent = text
+      const clicked = vi.fn()
+      el.addEventListener("click", clicked)
+      cleanups.push(
+        bind(instance.part("region"), region),
+        bind(instance.part("list"), list),
+        bind(instance.part("root", { id }), root),
+        bind(instance.part("title", { id }), title),
+        bind(instance.part(part, { id: part, toast: id }), el),
+        () => instance.destroy()
+      )
+      const component = agent
+        .snapshot()
+        .find((found) => found.component === "toast")
+      expect(component).toMatchObject({ buttons: [text] })
+      expect(component?.actions).toContain("press")
+      const outcome = await agent.act({
+        steps: [{ ref: component!.ref, action: "press", args: [text] }],
+      })
+      expect(outcome.ok, outcome.error?.message).toBe(true)
+      expect(clicked).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  test("lists no buttons for an open custom primitive whose part is a link", () => {
+    const notice = definePrimitive({
+      name: "notice",
+      state: (_options: {}) => ({ open: true }),
+      api: () => ({}),
+      slots: (slot) => ({
+        root: slot({ attrs: () => ({ "aria-label": "Notice" }) }),
+        action: slot({}),
+      }),
     })
-    const instance = toastRegion({ id: "toasts", toaster })
-    const region = document.body.appendChild(document.createElement("section"))
-    const list = region.appendChild(document.createElement("ol"))
-    const root = list.appendChild(document.createElement("li"))
-    root.getAnimations = () => []
-    const title = root.appendChild(document.createElement("div"))
-    title.textContent = "Message deleted"
-    const action = root.appendChild(document.createElement("button"))
-    action.textContent = "Undo"
+    const agent = createAgent()
+    const instance = notice({ id: "notice" })
+    const root = document.body.appendChild(document.createElement("div"))
+    const link = root.appendChild(document.createElement("a"))
+    link.href = "#help"
+    link.textContent = "Help"
     cleanups.push(
-      bind(instance.part("region"), region),
-      bind(instance.part("list"), list),
-      bind(instance.part("root", { id }), root),
-      bind(instance.part("title", { id }), title),
-      bind(instance.part("action", { id: "undo", toast: id }), action),
+      bind(instance.part("root"), root),
+      bind(instance.part("action"), link),
       () => instance.destroy()
     )
-    const component = agent
-      .snapshot()
-      .find((found) => found.component === "toast")
-    expect(component).toMatchObject({ buttons: ["Undo"] })
-    expect(component?.actions).toContain("press")
-    const outcome = await agent.act({
-      steps: [{ ref: component!.ref, action: "press", args: ["Undo"] }],
-    })
-    expect(outcome.ok, outcome.error?.message).toBe(true)
-    expect(onAction).toHaveBeenCalledTimes(1)
+    const [component] = agent.snapshot()
+    expect(component).toMatchObject({ component: "notice" })
+    expect(component).not.toHaveProperty("buttons")
   })
 
   test("lists no buttons for a custom primitive whose close its api covers", () => {
