@@ -28,7 +28,10 @@ import { select } from "../src/components/select/select"
 import { separator } from "../src/components/separator/separator"
 import { slider } from "../src/components/slider/slider"
 import { tabs } from "../src/components/tabs/tabs"
+import { toastRegion } from "../src/components/toast/toast"
+import { createToaster } from "../src/components/toast/toaster"
 import { toolbar } from "../src/components/toolbar/toolbar"
+import { createOverlays } from "../src/page/overlays/overlays"
 import { tree } from "../src/components/tree/tree"
 import { triggerMenu } from "../src/components/trigger-menu/trigger-menu"
 
@@ -1516,6 +1519,52 @@ describe("agent press", () => {
     })
     await agent.act({ steps: [{ ref: component.ref, action: "press" }] })
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  test("presses a toast's action by its text", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    )
+    cleanups.push(() => vi.unstubAllGlobals())
+    const agent = createAgent()
+    const toaster = createToaster({ overlays: createOverlays() })
+    const onAction = vi.fn()
+    const id = toaster("Message deleted", {
+      duration: Infinity,
+      action: { label: "Undo", onAction },
+    })
+    const instance = toastRegion({ id: "toasts", toaster })
+    const region = document.body.appendChild(document.createElement("section"))
+    const list = region.appendChild(document.createElement("ol"))
+    const root = list.appendChild(document.createElement("li"))
+    root.getAnimations = () => []
+    const title = root.appendChild(document.createElement("div"))
+    title.textContent = "Message deleted"
+    const action = root.appendChild(document.createElement("button"))
+    action.textContent = "Undo"
+    cleanups.push(
+      bind(instance.part("region"), region),
+      bind(instance.part("list"), list),
+      bind(instance.part("root", { id }), root),
+      bind(instance.part("title", { id }), title),
+      bind(instance.part("action", { id: "undo", toast: id }), action),
+      () => instance.destroy()
+    )
+    const component = agent
+      .snapshot()
+      .find((found) => found.component === "toast")
+    expect(component).toMatchObject({ buttons: ["Undo"] })
+    expect(component?.actions).toContain("press")
+    const outcome = await agent.act({
+      steps: [{ ref: component!.ref, action: "press", args: ["Undo"] }],
+    })
+    expect(outcome.ok, outcome.error?.message).toBe(true)
+    expect(onAction).toHaveBeenCalledTimes(1)
   })
 })
 
