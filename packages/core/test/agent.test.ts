@@ -1566,6 +1566,31 @@ describe("agent press", () => {
     expect(outcome.ok, outcome.error?.message).toBe(true)
     expect(onAction).toHaveBeenCalledTimes(1)
   })
+
+  test("lists no buttons for a custom primitive whose close its api covers", () => {
+    const banner = definePrimitive({
+      name: "banner",
+      state: (_options: {}) => ({}),
+      api: () => ({ close: () => {} }),
+      slots: (slot) => ({
+        root: slot({ attrs: () => ({ "aria-label": "Banner" }) }),
+        close: slot({}),
+      }),
+    })
+    const agent = createAgent()
+    const instance = banner({ id: "banner" })
+    const root = document.body.appendChild(document.createElement("div"))
+    const close = root.appendChild(document.createElement("button"))
+    close.textContent = "Dismiss"
+    cleanups.push(
+      bind(instance.part("root"), root),
+      bind(instance.part("close"), close),
+      () => instance.destroy()
+    )
+    const [component] = agent.snapshot()
+    expect(component).not.toHaveProperty("buttons")
+    expect(component.actions).toEqual(["close"])
+  })
 })
 
 describe("agent rows", () => {
