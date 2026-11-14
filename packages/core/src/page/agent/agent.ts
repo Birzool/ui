@@ -574,9 +574,11 @@ function describe(entry: Entry, instance: PrimitiveInstance, parts: Bound[]) {
   if (confirm) {
     out.confirm = confirm
   }
-  // An open popup's buttons, and a toolbar's, which are on the page whenever it is.
+  // An open popup's buttons, and those on the page whenever it is, like a
+  // toolbar's or a toast's action and close, which no api method presses.
   const buttons =
-    state.open === true || parts.some((part) => part.slot === "button")
+    state.open === true ||
+    (!opens && parts.some((part) => /^(button|action|close)$/.test(part.slot)))
       ? buttonsOf(parts).map(textOrName)
       : []
   if (buttons.length) {
