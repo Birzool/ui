@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-// A grid cell a keyed renderer moves to another row, keeping its key and its
-// element, is found at its new row: arrow keys land on the cell that is there
-// now. Driven as a framework adapter drives core: `instance.part` with each
-// render's props and one stable `ref` per part, which does not bind again
-// when only the props change.
+// A keyed cell moved to another row (same element) is found there by arrows,
+// driven like an adapter: new props each render, one stable `ref` per part.
 import { afterEach, expect, test } from "vitest"
 import { createGridFocus, definePrimitive, type GridCell } from "../src/index"
 import { ref } from "../src/foundation/kernel/part"
