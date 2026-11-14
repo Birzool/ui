@@ -45,6 +45,8 @@ type PartRecord = Part & {
   propsListeners?: Set<() => void>
   // The bound element's id when it isn't the one the slot makes, like an author's.
   own?: string
+  // The props `el` bound with, kept in development to compare.
+  boundProps?: Part["props"]
 }
 
 // The instance's side of its parts.
@@ -439,6 +441,9 @@ function bind(part: Part, el: HTMLElement, host: Host = { by: "core" }) {
   const binding = {}
   part.el = el
   kept.binding = binding
+  if (dev) {
+    kept.boundProps = part.props
+  }
   const cleanups = [lease(kept)]
   if (canHide(part)) {
     enforceHidden(el.ownerDocument)
@@ -495,18 +500,18 @@ function bind(part: Part, el: HTMLElement, host: Host = { by: "core" }) {
   }
 }
 
-// Two elements in the page binding one part are two parts given one key, which
-// share its props, so a press on one runs with the other's. Parts with no key,
-// like a dialog's close buttons, are many elements of one part. It checks a
-// microtask later, since one update can hand a part to another element before
-// the element that had it takes its next part, like a calendar's weekday
-// headers moving when the week starts on another day.
+// Two elements on a keyed part, or on a keyless part rendered with other
+// values like grid cells without ids, share props, so a press runs with the
+// other's. A microtask later: an update can hand a part on before it moves.
 function checkShared(
   part: Part,
   bound: HTMLElement | null | undefined,
   el: HTMLElement
 ) {
-  if (!part.key || !bound || bound === el) {
+  if (!bound || bound === el) {
+    return
+  }
+  if (!part.key && !differs((part as PartRecord).boundProps, part.props)) {
     return
   }
   queueMicrotask(() => {
@@ -520,13 +525,31 @@ function checkShared(
       }
     }
     warn(
-      `two "${part.slot}" parts share the key "${part.key}". Give each an id or a unique value.`,
+      part.key
+        ? `two "${part.slot}" parts share the key "${part.key}". Give each an id or a unique value.`
+        : `"${part.slot}" parts with different props have no key, so they share one part. Give each an id or a unique value.`,
       {
         component: label,
         id: part.id,
       }
     )
   })
+}
+
+// Objects and functions are often made anew on each render, so only values count.
+const isValue = (value: unknown) =>
+  value === null || (typeof value !== "object" && typeof value !== "function")
+
+function differs(before: object | undefined, after: object) {
+  if (!before) {
+    return false
+  }
+  const a = before as Record<string, unknown>
+  const b = after as Record<string, unknown>
+  return [...Object.keys(a), ...Object.keys(b)].some(
+    (name) =>
+      isValue(a[name]) && isValue(b[name]) && !Object.is(a[name], b[name])
+  )
 }
 
 /**
