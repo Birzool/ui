@@ -10,17 +10,17 @@ const wait = () => new Promise((resolve) => setTimeout(resolve, 10))
 const sortedGrid = definePrimitive({
   name: "sorted-grid",
   options: { rows: "number" },
-  state: () => ({ active: null as GridCell | null }),
+  state: (_options: { rows?: number }) => ({ active: null as GridCell | null }),
   api: (context) => ({
     grid: createGridFocus(context, {
       key: "active",
-      rows: () => (context.options() as { rows?: number }).rows ?? 0,
+      rows: () => context.options().rows ?? 0,
       cols: () => 1,
     }),
   }),
   slots: (slot) => ({
     root: slot({ role: "grid", keys: { none: "Each cell handles them." } }),
-    cell: slot({
+    cell: slot<{ row: number; col: number }>({
       props: { row: "number", col: "number" },
       role: "gridcell",
       focus: "roving",
