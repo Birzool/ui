@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// Grid cells are told apart by their `id`, as the grid focus docs ask. A cell
-// rendered without one shares a part with every other cell, so a press on one
-// runs with another's `row` and `col`.
+// Grid cells are told apart by their `id`; a cell without one shares a part
+// with the others, so a press runs with another cell's `row` and `col`.
 import { afterEach, expect, test, vi } from "vitest"
 import {
   byCell,
