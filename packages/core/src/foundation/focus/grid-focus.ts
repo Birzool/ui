@@ -86,7 +86,7 @@ const byCell = {
  *
  * ```ts
  * grid: slot({ role: "grid", keys: { none: "Focus stays on a cell, whose keydown handles them." } }),
- * cell: slot<{ row: number; col: number }>({
+ * cell: slot<{ id: string; row: number; col: number }>({
  *   role: "gridcell",
  *   focus: "roving",
  *   selects: selects({ active: byCell }),
@@ -102,6 +102,10 @@ const byCell = {
  *   bind: (el, { api, props }) => api.grid.bind(el, props),
  * })
  * ```
+ *
+ * Render each cell with a stable `id`, such as `` `${row}:${col}` ``, beside
+ * its `row` and `col`. Cells without one share a part, so a press would run
+ * with another cell's `row` and `col`.
  *
  * Shift with a move is reported in `onMove`, so a grid can extend a range
  * selection from it.
