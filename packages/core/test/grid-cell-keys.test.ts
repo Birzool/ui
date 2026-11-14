@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// Grid cells are told apart by their `id`; a cell without one shares a part
-// with the others, so a press runs with another cell's `row` and `col`.
-// Class part: in development the app isn't told so, or is told again and again.
+// Cells are told apart by `id`; without one they share a part, so a press
+// gets another cell's `row` and `col`. Class: dev warning missing or repeated.
 import { afterEach, expect, test, vi } from "vitest"
 import {
   byCell,
