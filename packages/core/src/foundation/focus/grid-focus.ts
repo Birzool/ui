@@ -237,6 +237,8 @@ function createGridFocus<State extends object>(
     },
     /** Joins a rendered cell, so focus can reach it. Return its cleanup from the slot's `bind`. */
     bind(el: HTMLElement, cell: GridCell) {
+      // Joins again at the end, so the newest join wins in elementAt.
+      cells.delete(el)
       cells.set(el, { row: cell.row, col: cell.col })
       if (sameCell(pending, cell)) {
         queueMicrotask(() => sameCell(pending, cell) && focusElement(cell))

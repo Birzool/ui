@@ -80,3 +80,21 @@ test("a cell moved to another row is reached there by the arrow keys", () => {
   press(cell("b"), "ArrowDown")
   expect(document.activeElement).toBe(cell("a"))
 })
+
+test("when two elements claim one cell, the newest bind wins", () => {
+  const instance = sortedGrid({ id: "g", rows: 3 })
+  cleanups.push(() => instance.destroy())
+  const [a, b] = ["a", "b"].map((id) => {
+    const el = document.createElement("div")
+    el.id = id
+    el.tabIndex = -1
+    document.body.append(el)
+    return el
+  })
+  const cell = { row: 1, col: 0 }
+  instance.api.grid.bind(a, cell)
+  instance.api.grid.bind(b, cell)
+  instance.api.grid.bind(a, cell)
+  instance.api.grid.focus(cell)
+  expect(document.activeElement).toBe(a)
+})
