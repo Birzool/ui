@@ -28,7 +28,10 @@ import { select } from "../src/components/select/select"
 import { separator } from "../src/components/separator/separator"
 import { slider } from "../src/components/slider/slider"
 import { tabs } from "../src/components/tabs/tabs"
+import { toastRegion } from "../src/components/toast/toast"
+import { createToaster } from "../src/components/toast/toaster"
 import { toolbar } from "../src/components/toolbar/toolbar"
+import { createOverlays } from "../src/page/overlays/overlays"
 import { tree } from "../src/components/tree/tree"
 import { triggerMenu } from "../src/components/trigger-menu/trigger-menu"
 
@@ -1516,6 +1519,118 @@ describe("agent press", () => {
     })
     await agent.act({ steps: [{ ref: component.ref, action: "press" }] })
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  // A toast's action renders as a button, or as a link when it has `href`;
+  // its close is a button. Each is listed and pressed by its text.
+  test.each([
+    { element: "a button action", part: "action", tag: "button", text: "Undo" },
+    { element: "a link action", part: "action", tag: "a", text: "Undo" },
+    { element: "the close", part: "close", tag: "button", text: "Dismiss" },
+  ] as const)(
+    "lists and presses $element of a toast by its text",
+    async ({ part, tag, text }) => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        }
+      )
+      cleanups.push(() => vi.unstubAllGlobals())
+      const agent = createAgent()
+      const toaster = createToaster({ overlays: createOverlays() })
+      const id = toaster("Message deleted", {
+        duration: Infinity,
+        action: { label: "Undo", href: tag === "a" ? "#undo" : undefined },
+      })
+      const instance = toastRegion({ id: "toasts", toaster })
+      const region = document.body.appendChild(
+        document.createElement("section")
+      )
+      const list = region.appendChild(document.createElement("ol"))
+      const root = list.appendChild(document.createElement("li"))
+      root.getAnimations = () => []
+      const title = root.appendChild(document.createElement("div"))
+      title.textContent = "Message deleted"
+      const el = root.appendChild(document.createElement(tag))
+      if (el instanceof HTMLAnchorElement) {
+        el.href = "#undo"
+      }
+      el.textContent = text
+      const clicked = vi.fn()
+      el.addEventListener("click", clicked)
+      cleanups.push(
+        bind(instance.part("region"), region),
+        bind(instance.part("list"), list),
+        bind(instance.part("root", { id }), root),
+        bind(instance.part("title", { id }), title),
+        bind(instance.part(part, { id: part, toast: id }), el),
+        () => instance.destroy()
+      )
+      const component = agent
+        .snapshot()
+        .find((found) => found.component === "toast")
+      expect(component).toMatchObject({ buttons: [text] })
+      expect(component?.actions).toContain("press")
+      const outcome = await agent.act({
+        steps: [{ ref: component!.ref, action: "press", args: [text] }],
+      })
+      expect(outcome.ok, outcome.error?.message).toBe(true)
+      expect(clicked).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  test("lists no buttons for an open custom primitive whose part is a link", () => {
+    const notice = definePrimitive({
+      name: "notice",
+      state: (_options: {}) => ({ open: true }),
+      api: () => ({}),
+      slots: (slot) => ({
+        root: slot({ attrs: () => ({ "aria-label": "Notice" }) }),
+        action: slot({}),
+      }),
+    })
+    const agent = createAgent()
+    const instance = notice({ id: "notice" })
+    const root = document.body.appendChild(document.createElement("div"))
+    const link = root.appendChild(document.createElement("a"))
+    link.href = "#help"
+    link.textContent = "Help"
+    cleanups.push(
+      bind(instance.part("root"), root),
+      bind(instance.part("action"), link),
+      () => instance.destroy()
+    )
+    const [component] = agent.snapshot()
+    expect(component).toMatchObject({ component: "notice" })
+    expect(component).not.toHaveProperty("buttons")
+  })
+
+  test("lists no buttons for a custom primitive whose close its api covers", () => {
+    const banner = definePrimitive({
+      name: "banner",
+      state: (_options: {}) => ({}),
+      api: () => ({ close: () => {} }),
+      slots: (slot) => ({
+        root: slot({ attrs: () => ({ "aria-label": "Banner" }) }),
+        close: slot({}),
+      }),
+    })
+    const agent = createAgent()
+    const instance = banner({ id: "banner" })
+    const root = document.body.appendChild(document.createElement("div"))
+    const close = root.appendChild(document.createElement("button"))
+    close.textContent = "Dismiss"
+    cleanups.push(
+      bind(instance.part("root"), root),
+      bind(instance.part("close"), close),
+      () => instance.destroy()
+    )
+    const [component] = agent.snapshot()
+    expect(component).not.toHaveProperty("buttons")
+    expect(component.actions).toEqual(["close"])
   })
 })
 

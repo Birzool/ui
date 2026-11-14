@@ -343,15 +343,23 @@ const isShown = (el: HTMLElement) =>
   (el.checkVisibility?.() ?? !el.closest("[hidden]")) &&
   !el.closest('[aria-hidden="true"]')
 
-// Buttons and menu items inside the component's elements, like a dialog's
-// Cancel and Delete or a menu's Remove, visible, not inert and not inside
-// `data-agent-hidden`.
-function buttonsOf(parts: Bound[]) {
+// What the snapshot lists and `press` clicks by text: buttons and menu items in
+// the component, like a dialog's Delete, and a toast's action and close, button
+// or link; each visible, not inert and not inside `data-agent-hidden`.
+function buttonsOf(entry: Entry, parts: Bound[]) {
   const found = new Set<HTMLElement>()
   for (const part of parts) {
-    for (const el of part.el.querySelectorAll<HTMLElement>(
-      "button, [role=button], [role^=menuitem]"
-    )) {
+    const own =
+      entry.component === "toast" &&
+      (part.slot === "action" || part.slot === "close")
+        ? [part.el]
+        : []
+    for (const el of [
+      ...own,
+      ...part.el.querySelectorAll<HTMLElement>(
+        "button, [role=button], [role^=menuitem]"
+      ),
+    ]) {
       if (
         el.checkVisibility?.() !== false &&
         !el.closest("[inert], [data-agent-hidden]")
@@ -574,10 +582,15 @@ function describe(entry: Entry, instance: PrimitiveInstance, parts: Bound[]) {
   if (confirm) {
     out.confirm = confirm
   }
-  // An open popup's buttons, and a toolbar's, which are on the page whenever it is.
+  // An open popup's buttons, a toolbar's, which are on the page whenever it
+  // is, and a toast's action and close, button or link, which no api method
+  // presses.
   const buttons =
-    state.open === true || parts.some((part) => part.slot === "button")
-      ? buttonsOf(parts).map(textOrName)
+    state.open === true ||
+    parts.some((part) => part.slot === "button") ||
+    (entry.component === "toast" &&
+      parts.some((part) => part.slot === "action" || part.slot === "close"))
+      ? buttonsOf(entry, parts).map(textOrName)
       : []
   if (buttons.length) {
     out.buttons = buttons
@@ -961,7 +974,10 @@ function createAgent(
     const match = () => {
       const parts = bound(instance)
       const open = (instance.get() as { open?: boolean }).open === true
-      const buttons = [...buttonsOf(parts), ...(open ? [] : triggersOf(parts))]
+      const buttons = [
+        ...buttonsOf(entry, parts),
+        ...(open ? [] : triggersOf(parts)),
+      ]
       // A popup's own button is its trigger, which opens it like a person's click.
       if (text === undefined) {
         return {
@@ -1056,8 +1072,10 @@ function createAgent(
   // The buttons a press can name, like a row menu's Make admin and Remove,
   // when they're on the page. A closed menu's aren't, and reading them would
   // open it without a step `allow` decided on, so it says press opens it.
-  function pressable(instance: PrimitiveInstance) {
-    const texts = buttonsOf(bound(instance)).map(textOrName).filter(Boolean)
+  function pressable(entry: Entry, instance: PrimitiveInstance) {
+    const texts = buttonsOf(entry, bound(instance))
+      .map(textOrName)
+      .filter(Boolean)
     if (texts.length) {
       return ` press takes a button's text: ${texts.join(", ")}.`
     }
@@ -1306,7 +1324,7 @@ function createAgent(
       const fn = (instance.api as Record<string, unknown>)[action]
       if (typeof fn !== "function" || disabled || !takes(entry, action)) {
         throw new Error(
-          `${entry.component} ${entry.ref} takes no ${action} now. It takes: ${actions.join(", ") || "nothing"}.${actions.includes("press") ? pressable(instance) : ""}`
+          `${entry.component} ${entry.ref} takes no ${action} now. It takes: ${actions.join(", ") || "nothing"}.${actions.includes("press") ? pressable(entry, instance) : ""}`
         )
       }
       // A number from text, like "90 days" on a slider, since a slider or number field given text would hold no number.
