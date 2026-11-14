@@ -131,24 +131,6 @@ const rekeyed = (
   next: Record<string, unknown>
 ) => previous.id !== next.id || previous.value !== next.value
 
-// A list read from its attribute again is a new array with the same items.
-const same = (a: unknown, b: unknown) =>
-  Object.is(a, b) ||
-  (Array.isArray(a) &&
-    Array.isArray(b) &&
-    a.length === b.length &&
-    a.every((item, index) => Object.is(item, b[index])))
-
-// A slot's binding reads its props once, like a grid cell's row, so a part
-// binds again when its key or one of them changes.
-const rebinds = (
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-  names: string[] = []
-) =>
-  rekeyed(previous, next) ||
-  names.some((name) => !same(previous[name], next[name]))
-
 const kebab = (name: string) =>
   name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)
 
@@ -632,8 +614,6 @@ type Part = {
   sync?: () => void
   // Reads its props again, for parts whose props come from their surroundings.
   reread?: () => Record<string, unknown>
-  // Props whose change binds it again.
-  rebind?: string[]
   keyed?: boolean
   // Watches a native child's attributes that its props follow.
   observer?: MutationObserver
@@ -1578,19 +1558,18 @@ function defineRootElement<P extends Primitive>(
           if (other.reread) {
             const previous = other.props
             other.props = other.reread()
-            this.#rewatch(other, rebinds(previous, other.props, other.rebind))
+            this.#rewatch(other, rekeyed(previous, other.props))
           }
           this.#sync(other)
         }
         reconfigureInside(part.el)
       }
 
-      // A part that stops showing unbinds as it hides, after its final attributes.
       #rewatch(part: Part, rebind: boolean) {
-        const record = this.#instance!.part(part.slot, part.props)
-        if (rebind && isPresent(record)) {
+        if (rebind) {
           this.#unbind(part)
         }
+        const record = this.#instance!.part(part.slot, part.props)
         if (record !== part.record || selectedKeys(record) !== part.selected) {
           this.#watch(part)
         }
@@ -1769,7 +1748,7 @@ type SlotConfig = {
   properties?: string[]
   /** Boolean props that start on, like `{ closeOnSelect: true }`, as the owner's `defaults`. */
   defaults?: BooleanDefaults
-  /** Other props the part's core binding reads once, so a change binds it again. A slot's own props always do. */
+  /** Props the part's core binding reads once, so a change binds it again. */
   rebind?: string[]
   /** @internal The feature that ships the slot, like a select's select-all option. */
   feature?: Feature
@@ -1932,7 +1911,6 @@ function definePartElement(tagName: string, config: SlotConfig) {
           el,
           props: this.#props(),
           reread: (config.context || config.from) && (() => this.#props()),
-          rebind: config.rebind,
           keyed: config.keyed,
         }
         partOwners.set(this, owner)
@@ -2024,7 +2002,10 @@ function definePartElement(tagName: string, config: SlotConfig) {
         const previous = this.#part.props
         this.#part.props = this.#props()
         const next = this.#part.props
-        this.#owner.update(this.#part, rebinds(previous, next, config.rebind))
+        const rebind =
+          rekeyed(previous, next) ||
+          !!config.rebind?.some((name) => previous[name] !== next[name])
+        this.#owner.update(this.#part, rebind)
         config.changed?.(this)
       }
     }
@@ -2244,14 +2225,8 @@ function partElement<P extends Primitive>(
     throw new Error(`<${tag}>: ${primitive.name} has no ${slot} slot.`)
   }
   const { attributes, ...props } = elementProps(slotSchema, schema, kinds)
-  const definition = ((
-    primitive.slots as Record<string, { bind?: unknown }> | undefined
-  )?.[slot] ?? options.feature?.slots[slot]) as { bind?: unknown } | undefined
   const config: SlotConfig = {
     ...options,
-    rebind: definition?.bind
-      ? [...new Set([...(options.rebind ?? []), ...Object.keys(slotSchema)])]
-      : options.rebind,
     slot,
     owner: [...new Set([...(root ? [root] : []), ...roots, ...owners])].join(
       ", "

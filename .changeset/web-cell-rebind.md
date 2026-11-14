@@ -1,5 +1,5 @@
 ---
-"@ui-sdk/web": patch
+"@ui-sdk/core": patch
 ---
 
-A part element binds again when one of its slot's props changes, so a grid cell a re-sort moves to another row is reached there by the arrow keys.
+`createGridFocus` finds a cell by the row and column its part last rendered with, not the ones it had when it bound. A keyed cell that a sort or a filter moves to another row, keeping its element, is now reached there by the arrow keys in every adapter.
