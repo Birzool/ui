@@ -212,7 +212,7 @@ function textToCells(text: string) {
  * instead of the grid:
  *
  * ```ts
- * cell: slot<{ row: number; col: number }>({
+ * cell: slot<{ id: string; row: number; col: number }>({
  *   role: "gridcell",
  *   focus: "roving",
  *   selects: selects({ active: byCell, range: byCellRange }),
@@ -232,6 +232,8 @@ function textToCells(text: string) {
  *   bind: (el, { api, props }) => api.range.bind(el, props),
  * })
  * ```
+ *
+ * Render each cell with a stable `id`, as `createGridFocus` shows.
  * @experimental
  */
 function createCellRange<State extends object>(
