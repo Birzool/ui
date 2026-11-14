@@ -1546,7 +1546,9 @@ describe("agent press", () => {
         action: { label: "Undo", href: tag === "a" ? "#undo" : undefined },
       })
       const instance = toastRegion({ id: "toasts", toaster })
-      const region = document.body.appendChild(document.createElement("section"))
+      const region = document.body.appendChild(
+        document.createElement("section")
+      )
       const list = region.appendChild(document.createElement("ol"))
       const root = list.appendChild(document.createElement("li"))
       root.getAnimations = () => []
